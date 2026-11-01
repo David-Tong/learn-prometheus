@@ -41,9 +41,32 @@ Pod 应处于 `Running` 且就绪状态。Prometheus 通过 `prometheus.io/*` �
 
 ## 2. 验证 Prometheus 抓取
 
-打开现有 Prometheus 页面，进入 **Status > Targets（状态 > 目标）**。找到 `kubernetes-service-endpoints` 任务，并确认 `spring-boot-api` 对应的 target 状态为 `UP`。
+先获取 Prometheus 的 NodePort 和可访问的节点 IP：
 
-也可以在 Prometheus 中运行以下查询：
+```bash
+kubectl get service prometheus-server-ext -n prometheus
+kubectl get nodes -o wide
+```
+
+从 Service 输出的 `PORT(S)` 列中读取冒号后的 NodePort，例如 `80:31870/TCP` 中的 `31870`。从节点输出中选择当前网络可访问的 `INTERNAL-IP`，然后在浏览器打开 `http://<node-ip>:<node-port>/targets`。如果还没有 `prometheus-server-ext` Service，请先按根目录 README 的“访问 Prometheus 和 Grafana”步骤创建它。
+
+在 Targets 页面找到 `kubernetes-service-endpoints` 任务，并展开目标列表，查找 namespace 为 `observability-demo`、Service 为 `spring-boot-api` 的目标：
+
+- `UP`：最近一次抓取成功。点击目标可查看抓取地址、最近抓取时间和耗时。
+- `DOWN`：Prometheus 找到了目标，但抓取失败。点击目标查看 **Error** 信息，通常可据此判断是连接、端口、路径或 HTTP 错误。
+- 找不到目标：Prometheus 尚未发现这个 Service，或抓取配置未选中它。检查 Service 注解和 Endpoint。
+
+目标为 `DOWN` 或未出现时，运行以下命令确认 Service 注解和后端 Pod 是否正常：
+
+```bash
+kubectl get service spring-boot-api -n observability-demo -o yaml
+kubectl get endpoints spring-boot-api -n observability-demo
+kubectl get pods -n observability-demo
+```
+
+Service 应带有 `prometheus.io/scrape: "true"`、`prometheus.io/path: /actuator/prometheus` 和 `prometheus.io/port: "8080"` 注解，且 Endpoint 应指向就绪的 Pod。
+
+也可以在 Prometheus 的 **Graph** 页面运行以下 PromQL 查询，直接验证抓取状态和应用请求指标：
 
 ```promql
 up{namespace="observability-demo", service="spring-boot-api"}
