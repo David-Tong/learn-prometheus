@@ -10,8 +10,8 @@ serverFiles:
             labels:
               severity: warning
             annotations:
-              summary: Spring Boot API scrape target is down
-              description: Prometheus has not been able to scrape the Spring Boot API for 2 minutes.
+              summary: Spring Boot API 指标抓取目标不可用
+              description: Prometheus 已连续 2 分钟无法抓取 Spring Boot API 的指标。
           - alert: SpringBootApiSLOBurnRateHigh
             expr: |
               (
@@ -30,5 +30,5 @@ serverFiles:
             labels:
               severity: critical
             annotations:
-              summary: Spring Boot API is burning its availability error budget quickly
-              description: The 5xx ratio is above 1.44% over both 5-minute and 1-hour windows, exceeding a 14.4x burn rate for a 99.9% SLO.
+              summary: Spring Boot API 的可用性错误预算消耗过快
+              description: 5 分钟和 1 小时窗口的 5xx 比例均超过 1.44%；对于 99.9% SLO，这代表错误预算消耗速率超过 14.4 倍。
