@@ -1,0 +1,76 @@
+# Learning-only demo image; its upstream image was last published in 2020.
+# Replace it with a maintained, trusted application image outside a lab.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot-api
+  namespace: observability-demo
+  labels:
+    app.kubernetes.io/name: spring-boot-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spring-boot-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spring-boot-api
+    spec:
+      containers:
+        - name: api
+          image: pierreroudier/micrometer-prometheus@sha256:76327fa67839d67dd20b8b8480524aba2f6e3a7b7939701a2f56ea998483c488
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring-boot-api
+  namespace: observability-demo
+  labels:
+    app.kubernetes.io/name: spring-boot-api
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /actuator/prometheus
+    prometheus.io/port: "8080"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: spring-boot-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

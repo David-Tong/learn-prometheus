@@ -1,0 +1,34 @@
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: spring-boot-api-slo
+        interval: 30s
+        rules:
+          - alert: SpringBootApiTargetDown
+            expr: up{namespace="observability-demo", service="spring-boot-api"} == 0
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: Spring Boot API scrape target is down
+              description: Prometheus has not been able to scrape the Spring Boot API for 2 minutes.
+          - alert: SpringBootApiSLOBurnRateHigh
+            expr: |
+              (
+                sum(rate(http_server_requests_seconds_count{namespace="observability-demo", service="spring-boot-api", status=~"5..", uri!~"/health|/actuator.*"}[5m]))
+                /
+                sum(rate(http_server_requests_seconds_count{namespace="observability-demo", service="spring-boot-api", uri!~"/health|/actuator.*"}[5m]))
+              ) > 0.0144
+              and
+              (
+                sum(rate(http_server_requests_seconds_count{namespace="observability-demo", service="spring-boot-api", status=~"5..", uri!~"/health|/actuator.*"}[1h]))
+                /
+                sum(rate(http_server_requests_seconds_count{namespace="observability-demo", service="spring-boot-api", uri!~"/health|/actuator.*"}[1h]))
+              ) > 0.0144
+              and sum(rate(http_server_requests_seconds_count{namespace="observability-demo", service="spring-boot-api", uri!~"/health|/actuator.*"}[5m])) > 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: Spring Boot API is burning its availability error budget quickly
+              description: The 5xx ratio is above 1.44% over both 5-minute and 1-hour windows, exceeding a 14.4x burn rate for a 99.9% SLO.
