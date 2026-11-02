@@ -116,7 +116,25 @@ public class OrderMetrics {
 }
 ```
 
-Micrometer 会把该 Counter 导出到 `/actuator/prometheus`。它是每个应用进程启动以来的累计完成订单数；可在指标端点确认实际导出的名称，再用 PromQL 查询 `sum(increase(business_orders_completed_total[1h]))`，汇总所有 API 实例最近一小时完成的订单数。应用重启时 Counter 会从零开始，Prometheus 的 `increase` 会处理计数器重置。
+这三部分通过 Spring 应用事件连接起来，而不是由 `OrderService` 直接调用 `OrderMetrics`：
+
+1. `completeOrder()` 更新订单后，`eventPublisher.publishEvent(new OrderCompletedEvent())` 将一个 `OrderCompletedEvent` 发布到 Spring 的应用事件机制中。
+2. `OrderCompletedEvent` 是事件类型，表示订单完成这一事实。Spring 根据事件类型找到 `OrderMetrics` 中参数类型匹配的监听方法 `onOrderCompleted(OrderCompletedEvent event)`。
+3. 因为监听方法使用 `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`，Spring 会等当前事务成功提交后才调用它。监听方法随后执行 `completedOrders.increment()`，将已完成订单数加一；如果事务回滚，监听器不会执行。
+
+因此，`publishEvent(...)` 的作用是发布事件，Spring 负责把事件交给监听器，并遵守事务阶段。当前事件不带订单 ID，因为 Counter 只需记录发生次数；不要把订单 ID 加成指标标签。
+
+应用加入 `micrometer-registry-prometheus` 后，Spring Boot 会自动配置 Prometheus registry。`Counter.builder("business.orders.completed")` 注册 Counter，Actuator 的 `/actuator/prometheus` 端点会调用 registry，将当前指标序列化为 Prometheus 文本格式。Micrometer 会将指标名中的点号转换为下划线，并为 Counter 加上 `_total` 后缀。假设进程启动后成功完成了 3 个订单，端点中会看到类似内容：
+
+```text
+# HELP business_orders_completed_total Number of successfully completed orders
+# TYPE business_orders_completed_total counter
+business_orders_completed_total 3.0
+```
+
+每次 `completedOrders.increment()` 后，这个值增加 1。Prometheus 按抓取周期请求该端点，并把每次读到的值保存为带时间戳的样本；在 Prometheus 中可直接查询 `business_orders_completed_total`，查看每个实例上报的累计值。目标的 `namespace`、`service`、`job`、`instance` 等标签会用于区分时间序列，具体标签取决于抓取配置。例如，可以用 `sum(business_orders_completed_total)` 查看各实例当前累计值之和，或用 `sum(increase(business_orders_completed_total[1h]))` 估算所有实例最近一小时完成的订单数。
+
+Counter 是每个应用进程启动以来单调增加的累计数；应用重启后会从零开始。Prometheus 的 `increase` 会处理抓取到的计数器重置，因此统计时间窗口内的增量时应使用 `increase`，而不是把当前累计值当作某个时间段内的完成数。
 
 Prometheus 不会自动获知未被应用记录的业务结果。为指标添加标签时，应使用有限且稳定的取值（例如业务类型），避免用户 ID、订单 ID 等高基数值，否则会产生大量时间序列并增加 Prometheus 的内存和存储开销。
 
