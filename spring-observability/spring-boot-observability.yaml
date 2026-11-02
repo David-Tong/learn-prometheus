@@ -1,5 +1,5 @@
-# 仅供学习的示例镜像；上游最后一次发布是在 2020 年。
-# 在实验环境之外使用时，请替换为你自己维护且可信的应用镜像。
+# Learning example image; the upstream image was last released in 2020.
+# Replace it with an application image you maintain before using outside a lab.
 apiVersion: v1
 kind: Namespace
 metadata:
